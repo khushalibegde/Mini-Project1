@@ -1,2 +1,2 @@
 # Mini-Porject1
-Mini Project with frontend and backend integrated
+Frontend and backend integrated
