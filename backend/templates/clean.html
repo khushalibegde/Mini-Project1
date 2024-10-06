@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cleaned Text</title>
+</head>
+<body>
+    <h1>Cleaned Text</h1>
+    <p>{{ cleaned_text }}</p>
+
+    <!-- Show skills button after cleaning -->
+    <form action="{{ url_for('cv_skill_match') }}" method="post">
+        <input type="hidden" name="text" value="{{ cleaned_text }}">
+        <button type="submit">Skills</button>
+    </form>
+    
+    <a href="{{ url_for('index') }}">Go Back</a>
+</body>
+</html>

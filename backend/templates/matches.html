@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Matched Categories</title>
+</head>
+<body>
+    <h1>Matched Categories</h1>
+    {% if matches %}
+        <ul>
+            {% for category, details in matches %}
+                <li>
+                    <strong>{{ category }}</strong> - {{ details['percentage'] }}% match 
+                    <br>
+                    <em>Matched Skills:</em> {{ details['matched_skills'] }}
+                    <br>
+                    <em>Unmatched Skills:</em> {{ details['unmatched_skills'] }}
+                    <br>
+                    <br>
+                    
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No categories matched.</p>
+    {% endif %}
+    <a href="{{ url_for('index') }}">Go Back</a>
+</body>
+</html>

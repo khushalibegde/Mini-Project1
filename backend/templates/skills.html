@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Skills</title>
+</head>
+<body>
+    <h2>Extracted Information</h2>
+
+    <p><strong>Name:</strong> {{ name if name else 'Not found' }}</p>
+    <p><strong>Phone Number:</strong> {{ phone if phone else 'Not found' }}</p>
+    <p><strong>Email:</strong> {{ email if email else 'Not found' }}</p>
+
+    <h3>Skills</h3>
+    <ul>
+    {% for skill in skills %}
+        <li>{{ skill }}</li>
+    {% endfor %}
+    </ul>
+    
+    <!-- Form to submit the skills for further comparison -->
+    <form action="{{ url_for('compare_text') }}" method="post">
+        <input type="hidden" name="text" value="{{ skills | join(', ') }}">
+        <button type="submit">Compare</button>
+    </form>
+    
+    <a href="{{ url_for('index') }}">Go Back</a>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Text Result</title>
+</head>
+<body>
+    <h1>Uploaded Text</h1>
+    <p>Name: {{ text }}</p>
+
+    <p><strong>{{  name }}</strong></p>
+
+    <!-- Form to submit the cleaned text for further cleaning -->
+    <form action="{{ url_for('clean_text_route') }}" method="post">
+        <input type="hidden" name="text" value="{{ text }}">
+        <button type="submit">Clean</button>
+    </form>
+
+    <!-- Show compare button after cleaning -->
+    
+    <a href="{{ url_for('index') }}">Go Back</a>
+</body>
+</html>
