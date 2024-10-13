@@ -10,7 +10,7 @@ from docx2txt import process as docx_process
 from PIL import Image   #to read and upload image
 import pytesseract  #to extract text form image
 from Models.skills_data import skills
-import spacy
+import spacy    
 from sklearn.feature_extraction.text import TfidfVectorizer
 from flask import jsonify
 from flask_cors import CORS
@@ -112,6 +112,7 @@ def extract_name(text):
     if name_candidates:
         return name_candidates[0]  # Return the first candidate as the name
     return None
+
 
 # Function to extract phone numbers
 def extract_phone_number(text):

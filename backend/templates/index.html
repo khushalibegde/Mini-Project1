@@ -2,13 +2,49 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>File Upload</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
 </head>
 <body>
-    <h1>Upload a file</h1>
-    <form method="post" action="/upload" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".txt, .pdf, .docx, .png, .jpg, .jpeg">
-        <input type="submit" value="Upload">
-    </form>
+    <h1>Upload a File</h1>
+    <input type="file" id="fileInput">
+    <button id="uploadButton">Upload</button>
+
+    <div id="progressContainer" style="display: none;">
+        <progress id="uploadProgress" value="0" max="100"></progress>
+        <span id="progressText">0%</span>
+    </div>
+
+    <script>
+        const socket = io();
+
+        document.getElementById('uploadButton').addEventListener('click', function() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            if (file) {
+                document.getElementById('progressContainer').style.display = 'block';
+                document.getElementById('uploadProgress').value = 0;
+                document.getElementById('progressText').innerText = '0%';
+
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    socket.emit('start_upload', { file: event.target.result });
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        socket.on('upload_progress', function(data) {
+            document.getElementById('uploadProgress').value = data.progress;
+            document.getElementById('progressText').innerText = data.progress + '%';
+        });
+
+        socket.on('upload_complete', function(data) {
+            alert(data.message);
+            document.getElementById('progressContainer').style.display = 'none';
+        });
+    </script>
 </body>
 </html>
