@@ -9,30 +9,46 @@ from pdfplumber import open as open_pdf
 from docx2txt import process as docx_process
 from PIL import Image   #to read and upload image
 import pytesseract  #to extract text form image
-from Models.skills_data import skills
+from models.skills_data import skills
 import spacy    
 from sklearn.feature_extraction.text import TfidfVectorizer
-from flask import jsonify
+from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
+from pymongo import MongoClient
+import base64 
+import io
+from flask import send_file
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+
 #import axios from 'axios';
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})  # Allow only your frontend
+
+
+client = MongoClient('mongodb+srv://khushalibegde18:y1ESj3rHlikmgxu6@cluster0.9q3rt.mongodb.net/')
+db = client['resume_analyzer']  
+candidates_collection = db['candidates']  
+jobs_collection = db['jobs']
+details_db = client['userid_pass'] 
+users_collection = details_db['users']
+company_collection = details_db['company']
+
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'txt', 'pdf', 'docx', 'png', 'jpg', 'jpeg'}
 
 nlp = spacy.load("en_core_web_sm")
 
-tfidf_matrixCV = None
 
 # Create the uploads directory if it doesn't exist
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
 # Load CSV data into a pandas DataFrame
-csv_path = 'dataa/UpdatedResumeDataSet.csv'  
+csv_path = 'dataa/Jobdataset.csv'  
 data = pd.read_csv(csv_path)
 
 #skills_path = 'dataa/TechnologySkills.csv'
@@ -113,6 +129,11 @@ def extract_name(text):
         return name_candidates[0]  # Return the first candidate as the name
     return None
 
+def get_next_id():
+    last_candidate = candidates_collection.find_one(
+        sort=[("_id", -1)] 
+    )
+    return (last_candidate['_id'] + 1) if last_candidate else 1
 
 # Function to extract phone numbers
 def extract_phone_number(text):
@@ -127,6 +148,19 @@ def extract_email(text):
     if email:
         return email[0]  # Return the first email found
     return None
+
+from flask import send_file, abort
+
+@app.route('/download/<filename>', methods=['GET'])
+def download_file(filename):
+    try:
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        if os.path.exists(filepath):
+            return send_file(filepath, as_attachment=True)
+        else:
+            return abort(404, description="File not found")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/')
 def index():
@@ -148,6 +182,9 @@ def upload_file():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
 
+
+        with open(filepath, 'rb') as f:
+            encoded_file = base64.b64encode(f.read()).decode('utf-8')
         # Determine file type and convert to text
         if file_ext == 'txt':
             with open(filepath, 'r', encoding='utf-8') as f:
@@ -180,10 +217,23 @@ def upload_file():
         
         # Combine both sets of matches
         all_matches = sorted(list(exact_matches.union(token_matches)))
+        candidate_id = get_next_id()
+        dictory = {
+            "_id": candidate_id,
+            "name": name,
+            "phone": phone_number,
+            "email": email,
+            "skills": all_matches,
+            "filename": filename,
+            "file_content": encoded_file,  # Store the file as Base64
+            "file_extension": file_ext  
+            }
         
+        candidates_collection.insert_one(dictory)
         # Render the result page with name, phone, email, and extracted skills
-        #return render_template('skills.html', skills=all_matches, name=name, phone=phone_number, email=email)
+        #return render_template('skills.html', skills=all_matches, name=name, phone=phone_number, email=email,candidate=dictory)
         return jsonify({
+            "id": candidate_id,
             "name": name,
             "phone": phone_number,
             "email": email,
@@ -191,7 +241,15 @@ def upload_file():
         })
 
     else:
+        
         return jsonify({"error": "Unsupported file type"}), 400
+
+def fetch_data(collection):
+    # Fetch all documents from the collection
+    data = collection.find()
+    return data
+
+
 
 
 def cv_skills():
@@ -228,7 +286,7 @@ def cv_skill_match():
 
 def job_skill_match():
     for index, row in data.iterrows():
-        resume_text = clean_text(row['Resume']).lower() 
+        resume_text = clean_text(row['Skills']).lower() 
 
     # Perform exact skill matching
     exact_matches = exact_match_skills(resume_text, skills)
@@ -250,7 +308,7 @@ def compare_text():
     matches = []
 
     for index, row in data.iterrows():
-        resume_text = clean_text(row['Resume']).lower()  # Clean and lowercase the resume text from the dataset
+        resume_text = clean_text(row['Skills']).lower()  # Clean and lowercase the resume text from the dataset
         similarity = calculate_similarity(cleaned_text, resume_text, skills)
 
         # Find matched and unmatched skills
@@ -266,7 +324,7 @@ def compare_text():
 
         if similarity >= 0.01 and matched_skills:  # Only consider matches with similarity >= 1% and skills found
             matches.append({
-                "category": row['Category'],
+                "category": row['Job'],
                 "percentage": round(similarity * 100, 2),
                 "matched_skills": ', '.join(matched_skills),
                 "unmatched_skills": ', '.join(unmatched_skills)
@@ -283,6 +341,155 @@ def compare_text():
     sorted_matches = sorted(unique_matches.values(), key=lambda x: x['percentage'], reverse=True)
 
     return jsonify({"matches": sorted_matches})
+
+
+#to get candidates for job description
+@app.route('/get_candidates', methods=['POST'])
+def get_candidates():
+    data = request.json  
+    job_description = data.get('job_description')
+
+    if not job_description:
+        return jsonify({"error": "Job description is required"}), 400
+
+    cleaned_description = clean_text(job_description)
+
+    data_list = candidates_collection.find({})
+    candidates = []
+
+    # Iterate through candidates and calculate similarity with job description
+    for candidate in data_list:
+        candidate_name = candidate.get("name")
+        resume_text = " ".join(candidate.get("skills", []))
+        similarity_score = calculate_similarity(cleaned_description, resume_text, skills) * 100
+
+        # Safely access 'filename', 'file_content', and 'file_extension'
+        candidates.append({
+            "name": candidate_name,
+            "email": candidate.get("email"),
+            "phone": candidate.get("phone"),
+            "skills": candidate.get("skills", []),
+            "similarity_score": round(similarity_score, 2),
+            'filename': candidate.get('filename', 'N/A'),  # Use default 'N/A' if missing
+            'file_content': candidate.get('file_content', ''),  # Default to empty string
+            'file_extension': candidate.get('file_extension', 'unknown')  # Default 'unknown'
+        })
+
+    # Sort candidates by similarity score in descending order
+    sorted_candidates = sorted(candidates, key=lambda x: x['similarity_score'], reverse=True)
+
+    return jsonify({
+        "job_description": cleaned_description,
+        "candidates": sorted_candidates
+    })
+
+@app.route('/companysignup', methods=['POST'])
+def companysignup():
+    data = request.json
+
+    # Check if the user already exists in the 'users' collection
+    if company_collection.find_one({"email": data['email']}):
+        return jsonify({"message": "User already exists"}), 400
+
+    # Hash the password for security
+    hashed_password = generate_password_hash(data['password'])
+
+    # Store the user details in the database
+    user_data = {
+        "companyName": data['companyName'],
+        "email": data['email'],
+        "contact": data['contact'],
+        "location": data['location'],
+        "password": hashed_password,
+        "created_at": datetime.utcnow()
+    }
+    company_collection.insert_one(user_data)
+
+    return jsonify({"message": "Sign up successful"}), 201
+
+@app.route('/candidatesignup', methods=['POST'])
+def candidatesignup():
+    data = request.json
+
+    # Check if the user already exists in the 'users' collection
+    if users_collection.find_one({"email": data['email']}):
+        return jsonify({"message": "User already exists"}), 400
+
+    # Hash the password for security
+    hashed_password = generate_password_hash(data['password'])
+
+    # Store the user details in the database
+    user_data = {
+        "name": data['name'],
+        "phone": data['phone'],
+        "email": data['email'],
+        "password": hashed_password,
+        "education": data['education'],
+        "created_at": datetime.utcnow()
+    }
+    users_collection.insert_one(user_data)
+
+    return jsonify({"message": "Sign up successful"}), 201
+
+# --- LOGIN ROUTE ---
+@app.route('/candidatelogin', methods=['POST'])
+def candidatelogin():
+    data = request.json
+
+    # Retrieve user by email
+    user = users_collection.find_one({"email": data['email']})
+
+    if user:
+        print("Stored Hash:", user['password'])
+        print("Entered Password:", data['password'])
+        # Check if password is valid
+        if check_password_hash(user['password'], data['password']):
+            users_collection.insert_one({
+                "email": data['email'],
+                "login_time": datetime.utcnow()
+            })
+            return jsonify({"message": "Login successful"}), 200
+        else:
+            return jsonify({"message": "Invalid password"}), 401
+    return jsonify({"message": "User not found"}), 404
+
+@app.route('/companylogin', methods=['POST'])
+def companylogin():
+    data = request.json
+
+    # Retrieve user by email
+    user = company_collection.find_one({"email": data['email']})
+
+    if user:
+        print("Stored Hash:", user['password'])
+        print("Entered Password:", data['password'])
+        # Check if password is valid
+        if check_password_hash(user['password'], data['password']):
+            company_collection.insert_one({
+                "email": data['email'],
+                "login_time": datetime.utcnow()
+            })
+            return jsonify({"message": "Login successful"}), 200
+        else:
+            return jsonify({"message": "Invalid password"}), 401
+    return jsonify({"message": "User not found"}), 404
+
+
+#get resume uploaded 
+@app.route('/candidates/<int:candidate_id>', methods=['GET'])
+def get_candidate_skills(candidate_id):
+    candidate = candidates_collection.find_one({"_id": candidate_id})
+    if candidate:
+        # Return the candidate's details in JSON format
+        return jsonify({
+            "name": candidate.get("name", "N/A"),
+            "phone": candidate.get("phone", "N/A"),
+            "email": candidate.get("email", "N/A"),
+            "skills": candidate.get("skills", []),
+            "file_content": candidate.get("file_content", "")  # Assuming it's base64
+        })
+    else:
+        return jsonify({"error": "Candidate not found"}), 404
 
 
 

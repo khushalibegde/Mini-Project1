@@ -23,7 +23,15 @@
         <input type="hidden" name="text" value="{{ skills | join(', ') }}">
         <button type="submit">Compare</button>
     </form>
-    
+    {% if candidate %}
+        <a href="/download/{{ candidate['filename'] }}" class="btn btn-primary">Download Uploaded File</a>
+    {% else %}
+        <p>No file available for download.</p>
+    {% endif %}
+
+
+
+
     <a href="{{ url_for('index') }}">Go Back</a>
 </body>
 </html>

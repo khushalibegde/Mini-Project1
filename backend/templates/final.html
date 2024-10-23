@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Recommendations</title>
+</head>
+<body>
+    <h1>Resume Analysis Results</h1>
+
+    <h2>Matched Skills</h2>
+    <ul>
+        {% for skill in matched_skills %}
+            <li>{{ skill }}</li>
+        {% else %}
+            <li>No skills matched</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Recommended Jobs</h2>
+    <ul>
+        {% for job in job_results %}
+            <li><strong>{{ job.title }}</strong> at {{ job.company }}</li>
+        {% else %}
+            <li>No jobs found</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
